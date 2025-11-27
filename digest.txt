@@ -1,0 +1,712 @@
+Directory structure:
+└── naveencmy-role_base_access/
+    ├── README.md
+    ├── backend/
+    │   ├── package.json
+    │   ├── server.js
+    │   └── src/
+    │       ├── app.js
+    │       ├── config/
+    │       │   ├── db.js
+    │       │   └── multer.js
+    │       ├── controllers/
+    │       │   ├── admin.controller.js
+    │       │   ├── auth.controller.js
+    │       │   └── image.controller.js
+    │       ├── middleware/
+    │       │   ├── auth.js
+    │       │   └── roleCheck.js
+    │       ├── routes/
+    │       │   ├── admin.routes.js
+    │       │   ├── auth.routes.js
+    │       │   └── image.routes.js
+    │       └── services/
+    │           ├── admin.service.js
+    │           ├── auth.service.js
+    │           └── image.service.js
+    └── frontend/
+        ├── README.md
+        ├── eslint.config.js
+        ├── index.html
+        ├── vite.config.js
+        └── src/
+            ├── App.css
+            ├── App.jsx
+            ├── index.css
+            └── main.jsx
+
+================================================
+FILE: README.md
+================================================
+# Role_base_access
+
+
+
+================================================
+FILE: backend/package.json
+================================================
+
+{
+  "name": "admin-worker-backend",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.0",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.10.0",
+    "uuid": "^9.0.0"
+  }
+}
+
+
+
+================================================
+FILE: backend/server.js
+================================================
+require("dotenv").config();
+const app = require("./src/app");
+
+
+const PORT = process.env.PORT || 4000;
+
+
+app.listen(PORT, () => {
+console.log(`Server running on ${PORT}`);
+});
+
+
+================================================
+FILE: backend/src/app.js
+================================================
+const express = require("express");
+const cors = require("cors");
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use("/auth", require("./routes/auth.routes"));
+app.use("/admin", require("./routes/admin.routes"));
+app.use("/image", require("./routes/image.routes"));
+
+
+module.exports = app;
+
+
+================================================
+FILE: backend/src/config/db.js
+================================================
+const { Pool } = require("pg");
+//include the db ask pool keyword from the .env file which is mention as dotenv
+require("dotenv").config();
+const pool = new Pool({
+user:process.env.DB_USER,
+password:process.env.DB_PASS,
+host:process.env.DB_HOST,
+database:process.env.DB_NAME,
+port:process.env.DB_PORT
+});
+//initate the coonection to db and make a check on it 
+pool.connect()
+    .then(()=>console.log("DB connected"))
+    .catch(()=>console.log("DB is not been connected"));
+module.exports = pool;
+
+
+================================================
+FILE: backend/src/config/multer.js
+================================================
+const multer = require("multer");
+const path = require("path");
+const { v4: uuid } = require("uuid");
+
+
+const storage = multer.diskStorage({
+destination: (req, file, cb) => {
+cb(null, path.join(__dirname, "../uploads"));
+},
+filename: (req, file, cb) => {
+const ext = path.extname(file.originalname);
+cb(null, uuid() + ext);
+},
+});
+
+
+module.exports = multer({ storage });
+
+
+================================================
+FILE: backend/src/controllers/admin.controller.js
+================================================
+const AdminService = require("../services/admin.service");
+
+
+exports.createWorker = (req, res) => AdminService.createWorker(req, res);
+exports.getWorkers = (req, res) => AdminService.getWorkers(req, res);
+exports.updateWorkerStatus = (req, res) => AdminService.updateWorkerStatus(req, res);
+
+
+================================================
+FILE: backend/src/controllers/auth.controller.js
+================================================
+const AuthService = require("../services/auth.service");
+
+
+exports.registerAdmin = (req, res) => AuthService.registerAdmin(req, res);
+exports.login = (req, res) => AuthService.login(req, res);
+
+
+================================================
+FILE: backend/src/controllers/image.controller.js
+================================================
+const ImageService = require("../services/image.service");
+
+
+exports.upload = (req, res) => ImageService.upload(req, res);
+exports.list = (req, res) => ImageService.list(req, res);
+exports.getById = (req, res) => ImageService.getById(req, res);
+
+
+================================================
+FILE: backend/src/middleware/auth.js
+================================================
+const jwt = require("jsonwebtoken");
+
+
+module.exports = (req, res, next) => {
+const token = req.headers.authorization?.split(" ")[1];
+
+
+if (!token) return res.status(401).json({ error: "No token provided" });
+
+
+try {
+const user = jwt.verify(token, process.env.JWT_SECRET);
+req.user = user;
+next();
+} catch {
+res.status(401).json({ error: "Invalid token" });
+}
+};
+
+
+================================================
+FILE: backend/src/middleware/roleCheck.js
+================================================
+module.exports = (role) => (req, res, next) => {
+if (req.user.role !== role) {
+return res.status(403).json({ error: "Forbidden: Wrong role" });
+}
+next();
+};
+
+
+================================================
+FILE: backend/src/routes/admin.routes.js
+================================================
+const router = require("express").Router();
+const auth = require("../middleware/auth");
+const roleCheck = require("../middleware/roleCheck");
+const AdminController = require("../controllers/admin.controller");
+
+
+router.post("/create-worker", auth, roleCheck("admin"), AdminController.createWorker);
+router.get("/workers", auth, roleCheck("admin"), AdminController.getWorkers);
+router.patch("/worker/:id/status", auth, roleCheck("admin"), AdminController.updateWorkerStatus);
+
+
+module.exports = router;
+
+
+================================================
+FILE: backend/src/routes/auth.routes.js
+================================================
+const router = require("express").Router();
+const AuthController = require("../controllers/auth.controller");
+
+
+router.post("/register-admin", AuthController.registerAdmin);
+router.post("/login", AuthController.login);
+
+
+module.exports = router;
+
+
+================================================
+FILE: backend/src/routes/image.routes.js
+================================================
+const router = require("express").Router();
+const auth = require("../middleware/auth");
+const roleCheck = require("../middleware/roleCheck");
+const upload = require("../config/multer");
+const ImageController = require("../controllers/image.controller");
+
+
+router.post("/upload", auth, roleCheck("admin"), upload.single("image"), ImageController.upload);
+router.get("/list", auth, ImageController.list);
+router.get("/:id", auth, ImageController.getById);
+
+
+module.exports = router;
+
+
+================================================
+FILE: backend/src/services/admin.service.js
+================================================
+const pool2 = require("../config/db");
+const { v4: uuid2 } = require("uuid");
+const bcrypt2 = require("bcryptjs");
+
+
+exports.createWorker = async (req, res) => {
+const adminId = req.user.userId;
+const { name, email, password } = req.body;
+
+
+try {
+const hashed = await bcrypt2.hash(password, 10);
+const id = uuid2();
+
+
+await pool2.query(
+`INSERT INTO users (id, name, email, password, role, admin_id)
+VALUES ($1,$2,$3,$4,'worker',$5)`,
+[id, name, email, hashed, adminId]
+);
+
+
+res.json({ message: "Worker created" });
+} catch (err) {
+res.status(500).json({ error: err.message });
+}
+};
+
+
+exports.getWorkers = async (req, res) => {
+try {
+const adminId = req.user.userId;
+const result = await pool2.query("SELECT * FROM users WHERE role='worker' AND admin_id=$1", [adminId]);
+res.json(result.rows);
+} catch (err) {
+res.status(500).json({ error: err.message });
+}
+};
+
+
+exports.updateWorkerStatus = async (req, res) => {
+const { id } = req.params;
+const { status } = req.body;
+
+
+try {
+await pool2.query("UPDATE users SET status=$1 WHERE id=$2", [status, id]);
+res.json({ message: "Worker status updated" });
+} catch (err) {
+res.status(500).json({ error: err.message });
+}
+};
+
+
+================================================
+FILE: backend/src/services/auth.service.js
+================================================
+const pool = require("../config/db");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const { v4: uuid } = require("uuid");
+
+
+exports.registerAdmin = async (req, res) => {
+const { name, email, password } = req.body;
+
+
+try {
+const hashed = await bcrypt.hash(password, 10);
+const id = uuid();
+
+
+await pool.query(
+"INSERT INTO users (id, name, email, password, role) VALUES ($1,$2,$3,$4,'admin')",
+[id, name, email, hashed]
+);
+
+
+res.json({ message: "Admin registered" });
+} catch (err) {
+res.status(500).json({ error: err.message });
+}
+};
+
+
+exports.login = async (req, res) => {
+const { email, password } = req.body;
+
+
+try {
+const result = await pool.query("SELECT * FROM users WHERE email=$1", [email]);
+if (result.rows.length === 0) return res.status(400).json({ error: "User not found" });
+
+
+const user = result.rows[0];
+const match = await bcrypt.compare(password, user.password);
+if (!match) return res.status(400).json({ error: "Invalid password" });
+
+
+const token = jwt.sign({
+userId: user.id,
+role: user.role,
+adminId: user.role === "worker" ? user.admin_id : user.id
+}, process.env.JWT_SECRET, { expiresIn: "10h" });
+
+
+res.json({ token });
+} catch (err) {
+res.status(500).json({ error: err.message });
+}
+};
+
+
+================================================
+FILE: backend/src/services/image.service.js
+================================================
+const pool3 = require("../config/db");
+const path3 = require("path");
+const fs = require("fs");
+const { v4: uuid3 } = require("uuid");
+
+
+exports.upload = async (req, res) => {
+const adminId = req.user.adminId;
+const userId = req.user.userId;
+const file = req.file.filename;
+
+
+try {
+const id = uuid3();
+
+
+await pool3.query(
+`INSERT INTO images (id, file_path, admin_id, uploaded_by)
+VALUES ($1,$2,$3,$4)`,
+[id, file, adminId, userId]
+);
+
+
+res.json({ message: "Image uploaded", id });
+} catch (err) {
+res.status(500).json({ error: err.message });
+}
+};
+
+
+exports.list = async (req, res) => {
+try {
+const adminId = req.user.adminId;
+const result = await pool3.query("SELECT * FROM images WHERE admin_id=$1", [adminId]);
+res.json(result.rows);
+} catch (err) {
+res.status(500).json({ error: err.message });
+}
+};
+
+
+exports.getById = async (req, res) => {
+const { id } = req.params;
+
+
+try {
+const image = await pool3.query("SELECT * FROM images WHERE id=$1", [id]);
+if (image.rows.length === 0) return res.status(404).json({ error: "Not found" });
+
+
+const img = image.rows[0];
+
+
+if (req.user.adminId !== img.admin_id) {
+return res.status(403).json({ error: "Access denied" });
+}
+
+
+const filePath = path3.join(__dirname, "../uploads/", img.file_path);
+res.sendFile(filePath);
+} catch (err) {
+res.status(500).json({ error: err.message });
+}
+};
+
+
+================================================
+FILE: frontend/README.md
+================================================
+# React + Vite
+
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+
+Currently, two official plugins are available:
+
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+
+## React Compiler
+
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Expanding the ESLint configuration
+
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+# to push it into the repos
+git remote add origin https://github.com/naveencmy/Role_base_access.git
+git branch -M main
+git push -u origin main
+
+
+================================================
+FILE: frontend/eslint.config.js
+================================================
+import js from '@eslint/js'
+import globals from 'globals'
+import reactHooks from 'eslint-plugin-react-hooks'
+import reactRefresh from 'eslint-plugin-react-refresh'
+import { defineConfig, globalIgnores } from 'eslint/config'
+
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{js,jsx}'],
+    extends: [
+      js.configs.recommended,
+      reactHooks.configs.flat.recommended,
+      reactRefresh.configs.vite,
+    ],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.browser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        ecmaFeatures: { jsx: true },
+        sourceType: 'module',
+      },
+    },
+    rules: {
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+    },
+  },
+])
+
+
+
+================================================
+FILE: frontend/index.html
+================================================
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>imageurl</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+
+
+
+================================================
+FILE: frontend/vite.config.js
+================================================
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react()],
+})
+
+
+
+================================================
+FILE: frontend/src/App.css
+================================================
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
+}
+
+
+
+================================================
+FILE: frontend/src/App.jsx
+================================================
+import { useState } from 'react'
+import reactLogo from './assets/react.svg'
+import viteLogo from '/vite.svg'
+import './App.css'
+
+function App() {
+  const [count, setCount] = useState(0)
+
+  return (
+    <>
+      <div>
+        <a href="https://vite.dev" target="_blank">
+          <img src={viteLogo} className="logo" alt="Vite logo" />
+        </a>
+        <a href="https://react.dev" target="_blank">
+          <img src={reactLogo} className="logo react" alt="React logo" />
+        </a>
+      </div>
+      <h1>Vite + React</h1>
+      <div className="card">
+        <button onClick={() => setCount((count) => count + 1)}>
+          count is {count}
+        </button>
+        <p>
+          Edit <code>src/App.jsx</code> and save to test HMR
+        </p>
+      </div>
+      <p className="read-the-docs">
+        Click on the Vite and React logos to learn more
+      </p>
+    </>
+  )
+}
+
+export default App
+
+
+
+================================================
+FILE: frontend/src/index.css
+================================================
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: #646cff;
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover {
+    color: #747bff;
+  }
+  button {
+    background-color: #f9f9f9;
+  }
+}
+
+
+
+================================================
+FILE: frontend/src/main.jsx
+================================================
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import './index.css'
+import App from './App.jsx'
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
+
+
